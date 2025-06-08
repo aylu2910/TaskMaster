@@ -1,0 +1,379 @@
+{% extends 'base.html' %}
+
+{% block title %}Mis Tareas{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Mis Tareas</h2>
+        <a href="{{ url_for('create_task') }}" class="btn btn-primary">+ Agregar Tarea</a>
+    </div>
+    
+    {# Filter Controls #}
+    <div class="row mb-3 gx-2">
+        <div class="col-md-6">
+            <label for="status-filter" class="form-label">Filtrar por Estado:</label>
+            <select id="status-filter" class="form-select">
+                <option value="Todos" {% if current_status == 'Todos' %}selected{% endif %}>Todos</option>
+                <option value="Pendientes" {% if current_status == 'Pendientes' %}selected{% endif %}>Pendientes</option>
+                <option value="Completadas" {% if current_status == 'Completadas' %}selected{% endif %}>Completadas</option>
+            </select>
+        </div>
+        <div class="col-md-6">
+            <label for="priority-filter" class="form-label">Filtrar por Prioridad:</label>
+            <select id="priority-filter" class="form-select">
+                <option value="Todas" {% if current_priority == 'Todas' %}selected{% endif %}>Todas</option>
+                <option value="Alta" {% if current_priority == 'Alta' %}selected{% endif %}>Alta</option>
+                <option value="Media" {% if current_priority == 'Media' %}selected{% endif %}>Media</option>
+                <option value="Baja" {% if current_priority == 'Baja' %}selected{% endif %}>Baja</option>
+            </select>
+        </div>
+    </div>
+    <hr>
+
+    {# Display flashed messages - Moved to base.html #}
+    {#
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    #}
+
+    <div class="row">
+        <div class="col-md-8"> 
+            {# Task list container now has a specific ID #}
+            <div id="task-list-area">
+                {% include 'partials/_task_list.html' with context %}
+            </div>
+        </div>
+        <div class="col-md-4"> {# Sidebar area #}
+            {# Added data-current-task-id attribute #}
+            <div id="task-details-sidebar" class="border rounded p-3 bg-light" style="display: none;" data-current-task-id=""> 
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="mb-0">Detalles de Tarea</h4>
+                    <button type="button" class="btn-close" id="close-sidebar" aria-label="Close"></button>
+                </div>
+                <hr>
+                <dl>
+                    <dt>Título:</dt>
+                    <dd id="sidebar-title">-</dd>
+
+                    <dt>Descripción:</dt>
+                    <dd id="sidebar-description" style="white-space: pre-wrap;">-</dd> {# Use pre-wrap for line breaks #}
+
+                    <dt>Fecha de Vencimiento:</dt>
+                    <dd id="sidebar-due-date">-</dd>
+
+                    <dt>Prioridad:</dt>
+                    <dd id="sidebar-priority">-</dd>
+
+                    {# Changed status display #}
+                    <dt>Estado:</dt>
+                    <dd id="sidebar-status">-</dd> 
+                </dl>
+                {# Status Checkbox - Placed below details, above actions #}
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" role="switch" id="task-status-checkbox">
+                    <label class="form-check-label" for="task-status-checkbox">Marcar como Completada</label>
+                </div>
+                <hr>
+                {# Action Buttons #}
+                <div class="d-grid gap-2"> {# Use d-grid for stacked buttons #}
+                    <button id="edit-task-btn" class="btn btn-secondary">Editar</button>
+                    <button id="delete-task-btn" class="btn btn-danger">Eliminar Tarea</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# JavaScript for Sidebar Interaction, Deletion, Edit, Status Toggle, and Filtering #}
+<script>
+// Function to attach event listeners to dynamic elements (tasks, sidebar buttons)
+function attachEventListeners() {
+    const taskItems = document.querySelectorAll('.task-item');
+    const sidebar = document.getElementById('task-details-sidebar');
+    const closeButton = document.getElementById('close-sidebar');
+    const deleteButton = document.getElementById('delete-task-btn');
+    const editButton = document.getElementById('edit-task-btn');
+    const statusCheckbox = document.getElementById('task-status-checkbox');
+
+    // Sidebar content selectors (needed for task click listener)
+    const sidebarTitle = document.getElementById('sidebar-title');
+    const sidebarDescription = document.getElementById('sidebar-description');
+    const sidebarDueDate = document.getElementById('sidebar-due-date');
+    const sidebarPriority = document.getElementById('sidebar-priority');
+    const sidebarStatus = document.getElementById('sidebar-status');
+
+    // Function to update UI (now needed inside attachEventListeners scope or passed as arg)
+    function updateTaskUI(taskId, isCompleted) {
+        const taskElement = document.getElementById(`task-item-${taskId}`);
+        const sidebarStatusElement = document.getElementById('sidebar-status'); // Re-select inside scope if needed
+        const taskStatusIndicator = taskElement?.querySelector('.task-status-indicator');
+
+        const statusText = isCompleted ? 'Completada' : 'Pendiente';
+        
+        if (sidebarStatusElement && sidebar.dataset.currentTaskId == taskId) {
+            sidebarStatusElement.textContent = statusText;
+        }
+
+        if (taskElement) {
+            if (taskStatusIndicator) {
+                taskStatusIndicator.textContent = statusText;
+            }
+            if (isCompleted) {
+                taskElement.classList.add('bg-light', 'text-muted');
+            } else {
+                taskElement.classList.remove('bg-light', 'text-muted');
+            }
+        }
+    }
+
+    // --- Attach Listeners --- 
+
+    // Task item click (open sidebar)
+    taskItems.forEach(item => {
+        // Remove existing listener first to prevent duplicates if called multiple times
+        item.replaceWith(item.cloneNode(true)); // Simple way to remove all listeners
+        document.getElementById(item.id).addEventListener('click', function() { // Re-attach to the cloned node
+             const taskId = this.dataset.taskId;
+             fetch(`/task_details/${taskId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        // If task not found (maybe deleted?), remove from list
+                        if (response.status === 404) {
+                             const taskElement = document.getElementById(`task-item-${taskId}`);
+                             if (taskElement) taskElement.remove();
+                             sidebar.style.display = 'none'; // Hide sidebar too
+                             throw new Error('Tarea no encontrada (404).'); // Prevent further processing
+                        }
+                        throw new Error(`Error de red: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        console.error('Error fetching task details:', data.error);
+                        alert("Error al cargar detalles: " + data.error);
+                    } else {
+                        // Populate sidebar
+                        sidebarTitle.textContent = data.title;
+                        sidebarDescription.textContent = data.description;
+                        sidebarDueDate.textContent = data.due_date;
+                        sidebarPriority.textContent = data.priority;
+                        sidebarStatus.textContent = data.is_completed ? 'Completada' : 'Pendiente'; // Update status text
+                        statusCheckbox.checked = data.is_completed; // Set checkbox state
+                        sidebar.dataset.currentTaskId = taskId; 
+
+                        // Show sidebar
+                        sidebar.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    // Avoid alerting for the 404 case we handled
+                    if (!error.message.includes('404')) {
+                         console.error('Fetch error:', error);
+                         alert("Ocurrió un error al obtener los detalles de la tarea.");
+                    }
+                });
+        });
+    });
+
+    // Sidebar close button
+    if (closeButton) {
+        closeButton.replaceWith(closeButton.cloneNode(true));
+        document.getElementById(closeButton.id).addEventListener('click', function() {
+            sidebar.style.display = 'none';
+            sidebar.dataset.currentTaskId = ''; // Clear current task ID
+        });
+    }
+
+    // Sidebar delete button
+    if (deleteButton) {
+        deleteButton.replaceWith(deleteButton.cloneNode(true));
+        document.getElementById(deleteButton.id).addEventListener('click', function() {
+            const taskIdToDelete = sidebar.dataset.currentTaskId;
+            if (!taskIdToDelete) {
+                console.error('No task ID found in sidebar data attribute.');
+                return; // Should not happen if sidebar is open
+            }
+
+            // Confirmation dialog
+            if (confirm('¿Estás seguro de que quieres eliminar esta tarea?')) {
+                fetch(`/delete_task/${taskIdToDelete}`, {
+                    method: 'DELETE',
+                    headers: {
+                        // Add headers if needed, e.g., CSRF token for security
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    }
+                })
+                .then(response => response.json()) // Always parse JSON response
+                .then(data => {
+                    if (data.success) {
+                        // Remove task item from the list
+                        const taskElement = document.getElementById(`task-item-${taskIdToDelete}`);
+                        if (taskElement) {
+                            taskElement.remove();
+                        }
+                        // Hide sidebar
+                        sidebar.style.display = 'none';
+                        sidebar.dataset.currentTaskId = ''; // Clear ID
+                        // Optionally show success message (e.g., using flash or a temporary element)
+                        console.log(data.message); 
+                        // alert(data.message); // Or use an alert
+                    } else {
+                        console.error('Error deleting task:', data.error);
+                        alert("Error al eliminar la tarea: " + (data.error || 'Error desconocido'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Delete fetch error:', error);
+                    alert("Ocurrió un error de red al intentar eliminar la tarea.");
+                });
+            } else {
+                // User clicked Cancel
+                console.log('Task deletion cancelled.');
+            }
+        });
+    }
+
+    // Sidebar edit button
+    if (editButton) {
+        editButton.replaceWith(editButton.cloneNode(true));
+        document.getElementById(editButton.id).addEventListener('click', function() {
+            const taskIdToEdit = sidebar.dataset.currentTaskId;
+            if (taskIdToEdit) {
+                // Redirect to the edit page for this task
+                window.location.href = `/edit_task/${taskIdToEdit}`;
+            } else {
+                console.error('No task ID found in sidebar data attribute for editing.');
+                alert("No se pudo determinar qué tarea editar.");
+            }
+        });
+    }
+
+    // Sidebar status checkbox
+    if (statusCheckbox) {
+        statusCheckbox.replaceWith(statusCheckbox.cloneNode(true));
+        document.getElementById(statusCheckbox.id).addEventListener('change', function() {
+             const taskId = sidebar.dataset.currentTaskId;
+             const isChecked = this.checked;
+
+             if (!taskId) {
+                 console.error('No current task ID found in sidebar');
+                 return;
+             }
+
+             fetch(`/toggle_task_status/${taskId}`, {
+                 method: 'PUT',
+                 headers: {
+                     'Content-Type': 'application/json' // Indicate we might send JSON (though not needed here)
+                 }
+             })
+             .then(response => response.json())
+             .then(data => {
+                 if (data.success) {
+                     // Update UI elements
+                     updateTaskUI(taskId, data.new_status);
+                      // Ensure checkbox reflects the actual new status from server
+                     document.getElementById(statusCheckbox.id).checked = data.new_status; 
+                     console.log(data.message);
+                 } else {
+                      // Revert checkbox on failure
+                     this.checked = !isChecked; 
+                     console.error('Error toggling status:', data.error);
+                     alert("Error al actualizar el estado: " + (data.error || 'Error desconocido'));
+                 }
+             })
+             .catch(error => {
+                 // Revert checkbox on network failure
+                 this.checked = !isChecked;
+                 console.error('Toggle status fetch error:', error);
+                 alert("Ocurrió un error de red al cambiar el estado.");
+             });
+        });
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const statusFilter = document.getElementById('status-filter');
+    const priorityFilter = document.getElementById('priority-filter');
+    const taskListArea = document.getElementById('task-list-area');
+
+    function applyFilters() {
+        const status = statusFilter.value;
+        const priority = priorityFilter.value;
+        
+        // Construct URL with query parameters
+        const url = new URL(window.location.origin + "{{ url_for('tasks') }}");
+        url.searchParams.set('status_filter', status);
+        url.searchParams.set('priority_filter', priority);
+
+        // Update browser history without reloading page
+        history.pushState({ path: url.toString() }, '', url.toString());
+
+        // Fetch the updated task list HTML fragment
+        fetch(url.toString(), {
+            headers: {
+                // Optional: Add a header if you want the backend to know it's an AJAX request
+                // 'X-Requested-With': 'XMLHttpRequest' 
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok when fetching filtered tasks.');
+            }
+            return response.text(); // Get the full HTML response as text
+        })
+        .then(html => {
+            // Parse the HTML response to find the new task list content
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const newTaskListContent = doc.getElementById('task-list-container'); // Find the container in the response
+            
+            if (newTaskListContent) {
+                 // Replace the current task list content with the new one
+                 const currentTaskListContainer = taskListArea.querySelector('#task-list-container');
+                 if(currentTaskListContainer){
+                      currentTaskListContainer.innerHTML = newTaskListContent.innerHTML;
+                 } else {
+                      // If the container didn't exist (e.g., no tasks initially), insert it
+                      taskListArea.innerHTML = newTaskListContent.outerHTML;
+                 }
+                 
+                 // IMPORTANT: Re-attach event listeners to the new task items and sidebar elements
+                 attachEventListeners(); 
+                 
+                 // Close sidebar if it was open, as its content might be outdated
+                 const sidebar = document.getElementById('task-details-sidebar');
+                 sidebar.style.display = 'none';
+                 sidebar.dataset.currentTaskId = '';
+                 
+            } else {
+                console.error('Could not find task-list-container in the fetched response.');
+                // Maybe show a generic error or clear the list
+                 taskListArea.innerHTML = '<div class="alert alert-warning">Error al cargar la lista de tareas.</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error applying filters:', error);
+            taskListArea.innerHTML = '<div class="alert alert-danger">Ocurrió un error al aplicar los filtros.</div>';
+        });
+    }
+
+    // Attach filter change listeners
+    statusFilter.addEventListener('change', applyFilters);
+    priorityFilter.addEventListener('change', applyFilters);
+
+    // Initial attachment of listeners for existing elements
+    attachEventListeners(); 
+});
+</script>
+
+{% endblock %}

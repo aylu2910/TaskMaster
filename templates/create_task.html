@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+
+{% block title %}Crear Nueva Tarea{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Crear Nueva Tarea</h2>
+    <hr>
+    <form method="POST" action="{{ url_for('create_task') }}">
+        {{ form.hidden_tag() }} {# Required for CSRF protection #}
+
+        <div class="mb-3">
+            {{ form.title.label(class="form-label") }}
+            {{ form.title(class="form-control" ~ (" is-invalid" if form.title.errors else "")) }}
+            {% if form.title.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.title.errors %}
+                        <span>{{ error }}</span>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="mb-3">
+            {{ form.description.label(class="form-label") }}
+            {{ form.description(class="form-control" ~ (" is-invalid" if form.description.errors else ""), rows="3") }}
+            {% if form.description.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.description.errors %}
+                        <span>{{ error }}</span>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                {{ form.due_date.label(class="form-label") }}
+                {{ form.due_date(id="due_date_input", class="form-control" ~ (" is-invalid" if form.due_date.errors else "")) }}
+                {% if form.due_date.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.due_date.errors %}
+                            <span>{{ error }}</span><br>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <div id="due-date-warning" class="form-text text-warning" style="display: none;">
+                    Advertencia: La fecha de vencimiento es muy lejana (más de 3 meses).
+                </div>
+                <div id="due-date-error" class="form-text text-danger" style="display: none;">
+                    La fecha de vencimiento no puede ser más de un año en el futuro.
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                {{ form.priority.label(class="form-label") }}
+                {{ form.priority(class="form-select" ~ (" is-invalid" if form.priority.errors else "")) }}
+                {% if form.priority.errors %}
+                    <div class="invalid-feedback">
+                        {% for error in form.priority.errors %}
+                            <span>{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="mt-3">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('tasks') }}" class="btn btn-secondary">Cancelar</a>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dueDateInput = document.getElementById('due_date_input');
+    const dueDateWarning = document.getElementById('due-date-warning');
+    const dueDateError = document.getElementById('due-date-error');
+
+    if (dueDateInput && dueDateWarning && dueDateError) {
+        dueDateInput.addEventListener('change', function() {
+            const selectedDateStr = this.value;
+            dueDateWarning.style.display = 'none';
+            dueDateError.style.display = 'none';
+            if (selectedDateStr) {
+                try {
+                    const selectedDate = new Date(selectedDateStr + 'T00:00:00');
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const ninetyDaysFromToday = new Date(today);
+                    ninetyDaysFromToday.setDate(today.getDate() + 90);
+                    const oneYearFromToday = new Date(today);
+                    oneYearFromToday.setDate(today.getDate() + 365);
+
+                    if (selectedDate > oneYearFromToday) {
+                        dueDateError.style.display = 'block';
+                        dueDateWarning.style.display = 'none';
+                    } else if (selectedDate > ninetyDaysFromToday) {
+                        dueDateWarning.style.display = 'block';
+                        dueDateError.style.display = 'none';
+                    }
+                } catch (e) {
+                    dueDateWarning.style.display = 'none';
+                    dueDateError.style.display = 'none';
+                }
+            } else {
+                dueDateWarning.style.display = 'none';
+                dueDateError.style.display = 'none';
+            }
+        });
+        dueDateInput.dispatchEvent(new Event('change'));
+    }
+});
+</script>
+{% endblock %} 

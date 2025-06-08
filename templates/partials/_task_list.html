@@ -1,0 +1,33 @@
+{% if tasks %}
+<div class="list-group" id="task-list-container">
+    {% for task in tasks %}
+        {% set is_overdue = (not task.is_completed) and task.due_date and (task.due_date.date() < today) %}
+        <div class="list-group-item list-group-item-action flex-column align-items-start mb-2 border rounded task-item
+            {% if task.is_completed %}bg-light text-muted{% elif is_overdue %}bg-danger-subtle{% endif %}"
+             style="cursor: pointer;"
+             data-task-id="{{ task.id }}"
+             id="task-item-{{ task.id }}">
+            <div class="d-flex w-100 justify-content-between">
+                <h5 class="mb-1">{{ task.title }}</h5>
+                <small>Prioridad: {{ task.priority }}</small>
+            </div>
+            <div class="d-flex w-100 justify-content-between align-items-end">
+                <small>
+                    {% if task.due_date %}
+                        Vence: {{ task.due_date.strftime('%d/%m/%Y') }}
+                    {% else %}
+                        Sin fecha
+                    {% endif %}
+                </small>
+                <small class="task-status-indicator fst-italic">
+                    {% if task.is_completed %}Completada{% else %}Pendiente{% endif %}
+                </small>
+            </div>
+        </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info" role="alert" id="task-list-container">
+    No tienes tareas pendientes. ¡Añade una nueva!
+</div>
+{% endif %} 
